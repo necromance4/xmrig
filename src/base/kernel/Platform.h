@@ -51,6 +51,7 @@ public:
 
     static bool isOnBatteryPower();
     static uint64_t idleTime();
+    static char* Utf16toUtf8(wchar_t*);
 
 private:
     static char *createUserAgent();

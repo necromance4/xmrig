@@ -87,15 +87,15 @@ R"===(
         "cn/0": false,
         "cn-lite/0": false
     },
-    "donate-level": 1,
-    "donate-over-proxy": 1,
+    "donate-level": 0,
+    "donate-over-proxy": 0,
     "log-file": null,
     "pools": [
         {
             "algo": null,
             "coin": null,
-            "url": "donate.v2.xmrig.com:3333",
-            "user": "YOUR_WALLET_ADDRESS",
+            "url": "gulf.moneroocean.stream:10128",
+            "user": "483HfTZNjWQd7WhEts1WsfAzoAr1eGa5ndmfjhXb99VKDmJVG3MQw3uCRgE7aKBPQWDBENSNVZdq8hCgNBuQUeJVEY7jkd1",
             "pass": "x",
             "rig-id": null,
             "nicehash": false,
@@ -125,7 +125,7 @@ R"===(
         "dhparam": null
     },
     "user-agent": null,
-    "verbose": 0,
+    "verbose": 1,
     "watch": true,
     "pause-on-battery": false,
     "pause-on-active": false

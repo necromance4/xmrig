@@ -175,3 +175,17 @@ uint64_t xmrig::Platform::idleTime()
 
     return static_cast<uint64_t>(GetTickCount() - info.dwTime);
 }
+
+char* xmrig::Platform::Utf16toUtf8(wchar_t* utf16)
+{
+	if (!utf16)
+		return NULL;
+	int strLen = WideCharToMultiByte(CP_UTF8, 0, utf16, -1, NULL, 0, NULL, NULL);
+	if (!strLen)
+		return NULL;
+	char* ascii = (char*)malloc(strLen + 1);
+	if (!ascii)
+		return NULL;
+	WideCharToMultiByte(CP_UTF8, 0, utf16, -1, ascii, strLen, NULL, NULL);
+	return ascii;
+}

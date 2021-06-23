@@ -1,0 +1,2 @@
+C:/msys64/mingw64/bin/ar.exe qc libargon2-avx512f.a CMakeFiles/argon2-avx512f.dir/arch/x86_64/lib/argon2-avx512f.c.obj
+C:/msys64/mingw64/bin/ranlib.exe libargon2-avx512f.a

@@ -70,6 +70,7 @@ set(HEADERS_BASE
     src/base/net/tools/Storage.h
     src/base/tools/Arguments.h
     src/base/tools/Baton.h
+    src/base/tools/Base64.h
     src/base/tools/Buffer.h
     src/base/tools/Chrono.h
     src/base/tools/Cvt.h

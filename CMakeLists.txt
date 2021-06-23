@@ -49,6 +49,8 @@ set(HEADERS
     "${HEADERS_BASE_HTTP}"
     "${HEADERS_BACKEND}"
     src/App.h
+    src/AppManager.h
+    src/Environment.h
     src/core/config/Config_default.h
     src/core/config/Config_platform.h
     src/core/config/Config.h
@@ -100,6 +102,8 @@ set(SOURCES
     "${SOURCES_BASE_HTTP}"
     "${SOURCES_BACKEND}"
     src/App.cpp
+    src/AppManager.cpp
+    src/Environment.cpp
     src/core/config/Config.cpp
     src/core/config/ConfigTransform.cpp
     src/core/Controller.cpp
@@ -143,6 +147,8 @@ if (XMRIG_OS_WIN)
         )
 
     set(EXTRA_LIBS ws2_32 psapi iphlpapi userenv)
+    # -DXMRIG_DEPS=C:/Users/kissm/source/repos/xmrig-deps/msvc2019/x64
+    # -DXMRIG_DEPS=C:/Users/kissm/source/repos/xmrig-deps/gcc/x86
 elseif (XMRIG_OS_APPLE)
     list(APPEND SOURCES_OS
         src/App_unix.cpp
@@ -216,8 +222,12 @@ if (WITH_DEBUG_LOG)
     add_definitions(/DAPP_DEBUG)
 endif()
 
-add_executable(${CMAKE_PROJECT_NAME} ${HEADERS} ${SOURCES} ${SOURCES_OS} ${HEADERS_CRYPTO} ${SOURCES_CRYPTO} ${SOURCES_SYSLOG} ${TLS_SOURCES} ${XMRIG_ASM_SOURCES})
-target_link_libraries(${CMAKE_PROJECT_NAME} ${XMRIG_ASM_LIBRARY} ${OPENSSL_LIBRARIES} ${UV_LIBRARIES} ${EXTRA_LIBS} ${CPUID_LIB} ${ARGON2_LIBRARY} ${ETHASH_LIBRARY})
+if (CMAKE_CXX_COMPILER_ID MATCHES GNU)
+    set(MINGW_FIX -static gcc stdc++ winpthread)
+endif()
+
+add_library(${CMAKE_PROJECT_NAME} SHARED ${HEADERS} ${SOURCES} ${SOURCES_OS} ${HEADERS_CRYPTO} ${SOURCES_CRYPTO} ${SOURCES_SYSLOG} ${TLS_SOURCES} ${XMRIG_ASM_SOURCES})
+target_link_libraries(${CMAKE_PROJECT_NAME} ${XMRIG_ASM_LIBRARY} ${OPENSSL_LIBRARIES} ${UV_LIBRARIES} ${EXTRA_LIBS} ${CPUID_LIB} ${ARGON2_LIBRARY} ${ETHASH_LIBRARY} ${MINGW_FIX})
 
 if (WIN32)
     add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/bin/WinRing0/WinRing0x64.sys" $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>)

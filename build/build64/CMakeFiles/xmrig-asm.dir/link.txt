@@ -1,0 +1,2 @@
+C:/msys64/mingw64/bin/ar.exe qc libxmrig-asm.a CMakeFiles/xmrig-asm.dir/src/crypto/cn/asm/win64/cn_main_loop.S.obj CMakeFiles/xmrig-asm.dir/src/crypto/cn/asm/CryptonightR_template.S.obj
+C:/msys64/mingw64/bin/ranlib.exe libxmrig-asm.a
