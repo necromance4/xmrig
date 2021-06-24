@@ -1,0 +1,2 @@
+C:/msys64/mingw32/bin/ar.exe qc libethash.a CMakeFiles/ethash.dir/ethash_internal.c.obj CMakeFiles/ethash.dir/keccakf800.c.obj
+C:/msys64/mingw32/bin/ranlib.exe libethash.a

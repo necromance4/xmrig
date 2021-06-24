@@ -1,0 +1,26 @@
+CMakeFiles/xmrig.dir/src/crypto/randomx/blake2/blake2b.c.obj: \
+ C:/Users/kissm/source/repos/xmrig/src/crypto/randomx/blake2/blake2b.c \
+ C:/msys64/mingw32/lib/gcc/i686-w64-mingw32/10.3.0/include/stdint.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/stdint.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/crtdefs.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/corecrt.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/_mingw.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/_mingw_mac.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/_mingw_secapi.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/vadefs.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/sdks/_mingw_ddk.h \
+ C:/msys64/mingw32/lib/gcc/i686-w64-mingw32/10.3.0/include/stddef.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/stddef.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/string.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/sec_api/string_s.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/stdio.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/corecrt_stdio_config.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/_mingw_off_t.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/swprintf.inl \
+ C:/msys64/mingw32/i686-w64-mingw32/include/sec_api/stdio_s.h \
+ C:/Users/kissm/source/repos/xmrig/src/crypto/randomx/blake2/blake2.h \
+ C:/msys64/mingw32/lib/gcc/i686-w64-mingw32/10.3.0/include-fixed/limits.h \
+ C:/msys64/mingw32/lib/gcc/i686-w64-mingw32/10.3.0/include-fixed/syslimits.h \
+ C:/msys64/mingw32/i686-w64-mingw32/include/limits.h \
+ C:/Users/kissm/source/repos/xmrig/src/crypto/randomx/blake2/blake2-impl.h \
+ C:/Users/kissm/source/repos/xmrig/src/crypto/randomx/blake2/endian.h

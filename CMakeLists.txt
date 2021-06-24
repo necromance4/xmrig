@@ -49,7 +49,6 @@ set(HEADERS
     "${HEADERS_BASE_HTTP}"
     "${HEADERS_BACKEND}"
     src/App.h
-    src/AppManager.h
     src/Environment.h
     src/core/config/Config_default.h
     src/core/config/Config_platform.h
@@ -102,7 +101,6 @@ set(SOURCES
     "${SOURCES_BASE_HTTP}"
     "${SOURCES_BACKEND}"
     src/App.cpp
-    src/AppManager.cpp
     src/Environment.cpp
     src/core/config/Config.cpp
     src/core/config/ConfigTransform.cpp

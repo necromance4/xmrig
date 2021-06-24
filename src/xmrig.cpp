@@ -1,4 +1,3 @@
-#include "AppManager.h"
 #include "Environment.h"
 #include "Windows.h"
 #include "base/kernel/Process.h"
