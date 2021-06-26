@@ -1,2 +1,0 @@
-C:/msys64/mingw64/bin/ar.exe qc libargon2-ssse3.a CMakeFiles/argon2-ssse3.dir/arch/x86_64/lib/argon2-ssse3.c.obj
-C:/msys64/mingw64/bin/ranlib.exe libargon2-ssse3.a

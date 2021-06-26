@@ -1,8 +1,9 @@
 /out
 /.vs
+build/build32/*
+build/build64/*
 scripts/build
 scripts/deps
-scripts/compressed_dll.ps1
 /CMakeLists.txt.user
 /.idea
 /src/backend/opencl/cl/cn/cryptonight_gen.cl

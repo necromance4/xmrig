@@ -1,9 +1,0 @@
-C:/Users/kissm/source/repos/xmrig/build/build32/CMakeFiles/edit_cache.dir
-C:/Users/kissm/source/repos/xmrig/build/build32/CMakeFiles/xmrig.dir
-C:/Users/kissm/source/repos/xmrig/build/build32/CMakeFiles/rebuild_cache.dir
-C:/Users/kissm/source/repos/xmrig/build/build32/src/3rdparty/argon2/CMakeFiles/edit_cache.dir
-C:/Users/kissm/source/repos/xmrig/build/build32/src/3rdparty/argon2/CMakeFiles/argon2.dir
-C:/Users/kissm/source/repos/xmrig/build/build32/src/3rdparty/argon2/CMakeFiles/rebuild_cache.dir
-C:/Users/kissm/source/repos/xmrig/build/build32/src/3rdparty/libethash/CMakeFiles/ethash.dir
-C:/Users/kissm/source/repos/xmrig/build/build32/src/3rdparty/libethash/CMakeFiles/edit_cache.dir
-C:/Users/kissm/source/repos/xmrig/build/build32/src/3rdparty/libethash/CMakeFiles/rebuild_cache.dir
