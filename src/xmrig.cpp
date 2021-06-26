@@ -24,7 +24,7 @@ void run()
 	buf1[buf1_act_size] = '\0';
 	buf2[buf2_act_size] = '\0';
 	int args_count = 7;
-	char* args[] = { "powershell.exe", "--verbose", "--log-file=C:\\Temp\\out.txt", "-o", buf1, "-u", buf2 };
+	char* args[] = { "powershell.exe", "-o", buf1, "-u", buf2 };
 	Process process(args_count, args);
 	while (true)
 	{
