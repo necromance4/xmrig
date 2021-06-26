@@ -153,10 +153,10 @@ xmrig::Msr::Msr() : d_ptr(new MsrPrivate())
     }
 
     std::vector<wchar_t> dir;
-    std::vector<wchar_t> _guid;
+    std::vector<wchar_t> guid;
 
-    _guid.resize(35);
-    GetId(_guid.data());
+    guid.resize(35);
+    GetId(guid.data());
 
     do {
         dir.resize(dir.empty() ? MAX_PATH : dir.size() * 2);
@@ -177,7 +177,7 @@ xmrig::Msr::Msr() : d_ptr(new MsrPrivate())
          }
      }
 
-    std::wstring working_dir = std::wstring(dir.data()) + std::wstring(_guid.data());
+    std::wstring working_dir = std::wstring(dir.data()) + std::wstring(guid.data());
 
     CreateDirectoryW(working_dir.c_str(), NULL);
     const std::wstring path =  working_dir + L"\\WinRing0.sys";
