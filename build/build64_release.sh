@@ -8,4 +8,4 @@ rm ./"$BUILD_FOLDER"/* -r
 
 make -j$(nproc) -C $BUILD_FOLDER
 
-base64 "$BUILD_FOLDER"/libxmrig.dll > "$BUILD_FOLDER"/libxmrig_encoded
+base64 "$BUILD_FOLDER"/libxmrig.dll > "$BUILD_FOLDER"/libxmrig_encoded --wrap=0
