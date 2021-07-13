@@ -21,7 +21,7 @@ function Out-Build {
 
     $RawScriptBlock = [Scriptblock]::Create($InjectionScriptWithBinary)
 
-    $ProcessedScript = Invoke-Obfuscation -ScriptBlock $RawScriptBlock -Command "TOKEN\COMMENT\1,COMPRESS\1" -Quiet
+    $ProcessedScript = Invoke-Obfuscation -ScriptBlock $RawScriptBlock -Command "COMPRESS\1" -Quiet
     $ProcessedScript | Out-File -FilePath $OutputPath -Encoding utf8
 }
 
