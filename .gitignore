@@ -2,6 +2,8 @@
 /.vs
 build/build32/*
 build/build64/*
+scripts/x32xmrbuild.ps1
+scripts/x64xmrbuild.ps1
 scripts/build
 scripts/deps
 /CMakeLists.txt.user
